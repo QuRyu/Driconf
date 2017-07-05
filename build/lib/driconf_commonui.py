@@ -30,7 +30,7 @@ import gobject
 
 # Install translations. Search in the current directory first (for
 # easy testing). Then search in the default location and in
-# /usr/local/share/locale. If all this fails fall back to the null
+# /usr/share/locale. If all this fails fall back to the null
 # translation.
 try:
     _ = gettext.translation ("driconf", ".").ugettext
@@ -38,7 +38,7 @@ except IOError:
     try:
         _ = gettext.translation ("driconf").ugettext
     except IOError:
-        _ = gettext.translation ("driconf", "/usr/local/share/locale",
+        _ = gettext.translation ("driconf", "/usr/share/locale",
                                  fallback=True).ugettext
 
 # global variable: lang
@@ -53,6 +53,9 @@ else:
 # encoding is only a dummy. Pango uses UTF-8 everywhere. :)
 del encoding
 
+# options that are semantically boolean values
+boolOpt = ["pp_celshade", "pp_jimenezmlaa", "pp_noblue", "pp_jimenezmlaa_color","pp_nored", "pp_nogreen", "force_glsl_version"] 
+
 # global variable: version
 version = "0.9.1"
 
@@ -66,13 +69,9 @@ mainWindow = None
 # Find a file that should have been installed in .../shared/driconf
 # Prefixes of __file__ are tried. And the current directory as a fallback.
 def findInShared (name):
-    # try all <prefix>/share/driconf/name for all prefixes of __file__
-    head,tail = os.path.split (__file__)
-    while head and tail:
-        f = os.path.join (head, "share/driconf", name)
-        if os.path.isfile (f):
-            return f
-        head,tail = os.path.split (head)
+    f = os.path.join ("/usr/share/driconf", name)
+    if os.path.isfile (f):
+        return f
     # try name in the current directory
     if os.path.isfile (name):
         return name
@@ -98,6 +97,12 @@ def fileIsWritable(filename):
 # escape text that is going to be passed as markup to pango
 def escapeMarkup (text):
     return text.replace ("<", "&lt;").replace (">", "&gt;")
+
+def isSemanticBool(optName):
+    for i in boolOpt:
+	if i == optName:
+            return True 
+    return False 
 
 class StockImage (gtk.Image):
     """ A stock image. """
@@ -349,9 +354,16 @@ class OptionLine:
         type = opt.type
         if not self.isValid:
             type = "invalid"
-        if type == "bool":
+        if type == "bool" or isSemanticBool (opt.name):
+	# if type == "bool":
             self.widget = gtk.ToggleButton ()
             self.widget.set_use_stock (True)
+            # Make sure the button doesn't change size when toggled
+            self.widget.set_label ("gtk-yes")
+            wYes = self.widget.size_request()[0]
+            self.widget.set_label ("gtk-no")
+            wNo = self.widget.size_request()[0]
+            self.widget.set_size_request (max(wYes, wNo), -1)
             if value:
                 self.widget.set_label ("gtk-yes")
             else:
@@ -424,10 +436,17 @@ class OptionLine:
         if not self.label.get_active():
             return None
         elif self.widget.__class__ == gtk.ToggleButton:
+            bool = isSemanticBool (self.opt.name)
             if self.widget.get_active():
-                return "true"
+                if bool:
+                    return 1 
+                else:
+                    return "true"
             else:
-                return "false"
+                if bool:
+                    return 0 
+                else:
+                    return "false"
         elif self.widget.__class__ == SlideSpinner:
             return str(self.widget.getValue())
         elif self.widget.__class__ == WrappingOptionMenu:

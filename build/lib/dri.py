@@ -21,7 +21,9 @@
 import os
 import string
 import re
+import locale
 import xml.parsers.expat
+import driconf_commonui
 
 class Error (Exception):
     """ Base class for DRIError and XMLError """
@@ -63,7 +65,12 @@ def StrToValue (str, type):
 
     Raises an XMLError if str is not of the correct type. """
     try:
-        if type == "int" or type == "enum":
+	if type == "enum" and (str == "true" or str == "false"):
+	    if str == "true": 
+		return 1 
+	    elif str == "false":
+	        return 0 
+        elif type == "int" or type == "enum":
             return int (str);
         elif type == "float":
             return float (str);
@@ -328,6 +335,29 @@ class DriverInfo:
                 return optSection.options[name]
         return None
 
+def _GLXInfoToUnicode(string):
+    """ Smart way to convert strings to unicode.
+
+    This should give the expected result in most cases that are interesting
+    for glxinfo output.
+    """
+    # Try a number of popular encodings starting with the locale's default.
+    # Try utf-8 before latin1, since latin1 will almost always succeed
+    # but not necessarily be correct.
+    lang,defenc = locale.getlocale(locale.LC_MESSAGES)
+    if not defenc:
+        encodings = ('utf-8', 'iso8859-1')
+    else:
+        encodings = (defenc, 'utf-8', 'iso8859-1')
+    for encoding in encodings:
+        try:
+            return unicode(string, encoding, 'strict')
+        except ValueError:
+            continue
+    # If we get here, all encodings failed. Use ascii with replacement
+    # of illegal characters as a failsafe fallback.
+    return unicode(string, 'ascii', 'replace')
+
 class GLXInfo:
     def __init__ (self, screen, dpy):
         if dpy == None:
@@ -359,6 +389,9 @@ class GLXInfo:
             self.renderer = rMatch and rMatch.group(1)
             if not self.vendor or not self.renderer:
                 raise DRIError ("unable to parse glxinfo output.")
+            # Make sure we end up with valid unicode
+            self.vendor = _GLXInfoToUnicode(self.vendor)
+            self.renderer = _GLXInfoToUnicode(self.renderer)
 
 class ScreenInfo:
     """ References a DriverInfo object with the real config info. """
@@ -454,7 +487,15 @@ class AppConfig:
         else:
             result = result + '>\n'
         for n, v in self.options.items ():
-            result = result + '            <option name="' + n + \
+            if type(v)==int:
+                if v==1:
+                    result = result + '            <option name="' + n + \
+                             '" value="1" />\n'
+                else:
+                    result = result + '            <option name="' + n + \
+                             '" value="0" />\n'
+            else:
+                result = result + '            <option name="' + n + \
                      '" value="' + v + '" />\n'
         result = result + '        </application>'
         return result
